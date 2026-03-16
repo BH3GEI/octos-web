@@ -1,0 +1,58 @@
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "./auth/auth-context";
+import { AuthGuard } from "./auth/auth-guard";
+import { LoginPage } from "./auth/login-page";
+import { OctosRuntimeProvider } from "./runtime/runtime-provider";
+import { ChatLayout } from "./layouts/chat-layout";
+import { Thread } from "./components/thread";
+import { ThinkingIndicator } from "./components/thinking-indicator";
+import {
+  ShellToolUI,
+  ReadFileToolUI,
+  WriteFileToolUI,
+  EditFileToolUI,
+  WebSearchToolUI,
+  WebFetchToolUI,
+  GrepToolUI,
+  GlobToolUI,
+  GenericToolUI,
+} from "./tools";
+
+export function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route element={<AuthGuard />}>
+            <Route
+              path="/*"
+              element={
+                <OctosRuntimeProvider>
+                  <ChatLayout>
+                    <div className="flex h-full flex-col">
+                      <ThinkingIndicator />
+                      <div className="flex-1 overflow-hidden">
+                        <Thread />
+                      </div>
+                    </div>
+                  </ChatLayout>
+                  {/* Register tool UIs */}
+                  <ShellToolUI />
+                  <ReadFileToolUI />
+                  <WriteFileToolUI />
+                  <EditFileToolUI />
+                  <WebSearchToolUI />
+                  <WebFetchToolUI />
+                  <GrepToolUI />
+                  <GlobToolUI />
+                  <GenericToolUI />
+                </OctosRuntimeProvider>
+              }
+            />
+          </Route>
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}

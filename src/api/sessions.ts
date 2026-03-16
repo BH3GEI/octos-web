@@ -1,0 +1,32 @@
+import { request } from "./client";
+import type { SessionInfo, MessageInfo } from "./types";
+
+export async function listSessions(): Promise<SessionInfo[]> {
+  return request("/api/sessions");
+}
+
+export async function getMessages(
+  sessionId: string,
+  limit = 100,
+  offset = 0,
+): Promise<MessageInfo[]> {
+  return request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/messages?limit=${limit}&offset=${offset}`,
+  );
+}
+
+export async function deleteSession(sessionId: string): Promise<void> {
+  await request(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getStatus() {
+  return request<{
+    version: string;
+    model: string;
+    provider: string;
+    uptime_secs: number;
+    agent_configured: boolean;
+  }>("/api/status");
+}
