@@ -31,6 +31,25 @@ function generateSessionId(): string {
   return `web-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Extract a sortable timestamp from a session ID.
+ *  Handles both formats:
+ *    web-{timestamp}-{random}  → timestamp directly (milliseconds)
+ *    web-{uuid-v7}             → extract ms from UUID v7 first 48 bits
+ */
+function sessionTimestamp(s: SessionInfo): number {
+  const id = s.id.replace("web-", "");
+  // UUID v7: 019d044f-aa95-7d92-...  (first 12 hex chars = 48-bit timestamp)
+  if (id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-7/)) {
+    const hex = id.replace(/-/g, "").slice(0, 12);
+    return parseInt(hex, 16);
+  }
+  // Timestamp: 1773856707984-nt380h
+  const ts = parseInt(id.split("-")[0], 10);
+  if (!isNaN(ts) && ts > 1700000000000) return ts;
+  // Fallback: use created_at if available, or 0
+  return 0;
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState(() => {
@@ -44,12 +63,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     console.log("[session] refreshSessions called");
     try {
       const list = await listSessions();
-      // Only show web client sessions with messages, most recent first, limit 20
+      // Only show web client sessions with messages, sorted newest first
       const webSessions = list
         .filter((s) => s.id.startsWith("web-") && (s.message_count ?? 0) > 0)
-        .slice(-20); // API returns oldest first, take last 20 = most recent
+        .sort((a, b) => sessionTimestamp(b) - sessionTimestamp(a))
+        .slice(0, 20);
       console.log("[session] refreshSessions got", list.length, "total,", webSessions.length, "shown");
-      setSessions(webSessions.reverse()); // newest first in sidebar
+      setSessions(webSessions);
     } catch (e) {
       console.warn("[session] refreshSessions failed:", e);
     }
