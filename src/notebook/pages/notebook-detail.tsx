@@ -6,12 +6,19 @@ import {
   BookmarkPlus, Edit3, X, Send, CheckSquare, Square, Loader2,
   ChevronLeft, ChevronRight, RotateCcw, Eye, Columns2,
   Share2, UserPlus, Copy, Clock, Calendar, MessageCircle,
+  Download,
 } from "lucide-react";
 import { listNotebooks } from "../api/notebooks";
 import { listSources, addSource, deleteSource } from "../api/sources";
 import { listNotes, createNote, updateNote, deleteNote } from "../api/notes";
 import type { Notebook, Source, Note } from "../api/types";
 import { NotebookMarkdown } from "../components/notebook-markdown";
+import { SlidesUI } from "../components/studio-slides";
+import { InfographicUI } from "../components/studio-infographic";
+import { ReportUI } from "../components/studio-report";
+import { ComicUI } from "../components/studio-comic";
+import { PodcastUI } from "../components/studio-podcast";
+import { ResearchUI } from "../components/studio-research";
 
 type Tab = "sources" | "chat" | "notes" | "studio";
 
@@ -753,6 +760,32 @@ function NotesPanel({ notebookId }: { notebookId: string }) {
   const [multiSelect, setMultiSelect] = useState(false);
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const [synthesizing, setSynthesizing] = useState(false);
+  const [exportDropdown, setExportDropdown] = useState<string | null>(null);
+
+  // Issue #22: note export helpers
+  const downloadFile = (filename: string, content: string, mime = "text/markdown") => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportNoteMd = (note: Note) => {
+    downloadFile(`note-${note.id}.md`, note.content);
+  };
+
+  const exportNotePdf = async (note: Note) => {
+    await chatApi(notebookId, `Format this note nicely for printing:\n\n${note.content}`);
+    window.print();
+  };
+
+  const exportAllNotes = () => {
+    const combined = notes.map((n, i) => `# Note ${i + 1}\n\n${n.content}`).join("\n\n---\n\n");
+    downloadFile("all-notes.md", combined);
+  };
 
   const load = useCallback(async () => {
     setNotes(await listNotes(notebookId));
@@ -868,6 +901,15 @@ function NotesPanel({ notebookId }: { notebookId: string }) {
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-medium text-text-strong">{notes.length} Notes</h2>
         <div className="flex items-center gap-2">
+          {/* Issue #22: Export All Notes */}
+          {notes.length > 0 && (
+            <button
+              onClick={exportAllNotes}
+              className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm text-muted hover:text-text transition"
+            >
+              <Download size={14} /> Export All
+            </button>
+          )}
           {/* Issue #21: multi-select toggle */}
           <button
             onClick={() => { setMultiSelect(!multiSelect); setSelectedNoteIds(new Set()); }}
@@ -934,6 +976,23 @@ function NotesPanel({ notebookId }: { notebookId: string }) {
                   <div className="mt-2 flex items-center justify-between">
                     <span className="text-xs text-muted">{new Date(n.created_at).toLocaleDateString()}</span>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Issue #22: Export dropdown */}
+                      <div className="relative">
+                        <button onClick={() => setExportDropdown(exportDropdown === n.id ? null : n.id)}
+                          className="rounded p-1 text-muted hover:text-accent"><Download size={12} /></button>
+                        {exportDropdown === n.id && (
+                          <div className="absolute right-0 bottom-full mb-1 z-20 rounded-lg border border-border bg-surface shadow-lg py-1 min-w-[160px]">
+                            <button onClick={() => { exportNoteMd(n); setExportDropdown(null); }}
+                              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-text hover:bg-surface-light">
+                              Export as Markdown
+                            </button>
+                            <button onClick={() => { exportNotePdf(n); setExportDropdown(null); }}
+                              className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-text hover:bg-surface-light">
+                              Export as PDF
+                            </button>
+                          </div>
+                        )}
+                      </div>
                       <button onClick={() => { setEditingId(n.id); setEditContent(n.content); }}
                         className="rounded p-1 text-muted hover:text-accent"><Edit3 size={12} /></button>
                       <button onClick={() => handleDelete(n.id)}
@@ -999,6 +1058,18 @@ function StudioPanel({ notebookId }: { notebookId: string }) {
             <FlashcardsUI notebookId={notebookId} />
           ) : active === "mindmap" ? (
             <MindMapUI notebookId={notebookId} />
+          ) : active === "slides" ? (
+            <SlidesUI notebookId={notebookId} chatApi={chatApi} />
+          ) : active === "infographic" ? (
+            <InfographicUI notebookId={notebookId} chatApi={chatApi} />
+          ) : active === "report" ? (
+            <ReportUI notebookId={notebookId} chatApi={chatApi} />
+          ) : active === "comic" ? (
+            <ComicUI notebookId={notebookId} chatApi={chatApi} />
+          ) : active === "audio" ? (
+            <PodcastUI notebookId={notebookId} chatApi={chatApi} />
+          ) : active === "research" ? (
+            <ResearchUI notebookId={notebookId} chatApi={chatApi} />
           ) : (
             <GenericStudioUI notebookId={notebookId} outputType={active} />
           )}
