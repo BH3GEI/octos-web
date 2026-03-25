@@ -1,67 +1,54 @@
+import { request } from "@/api/client";
+import { getToken } from "@/api/client";
+import { API_BASE } from "@/lib/constants";
 import type { Source } from "./types";
 
-// Stub: localStorage until backend is ready
-const STORAGE_KEY = "mofa_sources";
-
-function loadSources(): Source[] {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function saveSources(sources: Source[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sources));
-}
-
 export async function listSources(notebookId: string): Promise<Source[]> {
-  return loadSources().filter((s) => s.notebook_id === notebookId);
+  return request<Source[]>(`/api/notebooks/${notebookId}/sources`);
 }
 
-export async function addSource(
+export async function addSourceText(
   notebookId: string,
-  opts: { type: Source["type"]; filename: string; content?: string },
+  opts: { text: string; filename?: string },
 ): Promise<Source> {
-  const src: Source = {
-    id: `src-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    notebook_id: notebookId,
-    type: opts.type,
-    filename: opts.filename,
-    status: "ready", // stub: immediately ready
-    chunk_count: 0,
-    created_at: new Date().toISOString(),
-  };
-  const all = loadSources();
-  all.push(src);
-  saveSources(all);
+  return request<Source>(`/api/notebooks/${notebookId}/sources`, {
+    method: "POST",
+    body: JSON.stringify({ text: opts.text, filename: opts.filename }),
+  });
+}
 
-  // Update notebook source_count
-  const nbKey = "mofa_notebooks";
-  try {
-    const nbs = JSON.parse(localStorage.getItem(nbKey) || "[]");
-    const idx = nbs.findIndex((n: { id: string }) => n.id === notebookId);
-    if (idx !== -1) {
-      nbs[idx].source_count = (nbs[idx].source_count || 0) + 1;
-      localStorage.setItem(nbKey, JSON.stringify(nbs));
-    }
-  } catch { /* */ }
+export async function addSourceUrl(
+  notebookId: string,
+  url: string,
+): Promise<Source> {
+  return request<Source>(`/api/notebooks/${notebookId}/sources`, {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+}
 
-  return src;
+export async function uploadSourceFile(
+  notebookId: string,
+  file: File,
+): Promise<Source> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const resp = await fetch(`${API_BASE}/api/notebooks/${notebookId}/sources/upload`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(text || `HTTP ${resp.status}`);
+  }
+
+  return resp.json();
 }
 
 export async function deleteSource(notebookId: string, sourceId: string): Promise<void> {
-  const all = loadSources().filter((s) => !(s.id === sourceId && s.notebook_id === notebookId));
-  saveSources(all);
-
-  // Update notebook source_count
-  const nbKey = "mofa_notebooks";
-  try {
-    const nbs = JSON.parse(localStorage.getItem(nbKey) || "[]");
-    const idx = nbs.findIndex((n: { id: string }) => n.id === notebookId);
-    if (idx !== -1) {
-      nbs[idx].source_count = Math.max(0, (nbs[idx].source_count || 1) - 1);
-      localStorage.setItem(nbKey, JSON.stringify(nbs));
-    }
-  } catch { /* */ }
+  await request(`/api/notebooks/${notebookId}/sources/${sourceId}`, { method: "DELETE" });
 }

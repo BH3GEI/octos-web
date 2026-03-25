@@ -8,8 +8,8 @@ import {
   Share2, UserPlus, Copy, Clock, Calendar, MessageCircle,
   Download,
 } from "lucide-react";
-import { listNotebooks } from "../api/notebooks";
-import { listSources, addSource, deleteSource } from "../api/sources";
+import { listNotebooks, getNotebook } from "../api/notebooks";
+import { listSources, addSourceText, addSourceUrl, uploadSourceFile, deleteSource } from "../api/sources";
 import { listNotes, createNote, updateNote, deleteNote } from "../api/notes";
 import type { Notebook, Source, Note } from "../api/types";
 import { NotebookMarkdown } from "../components/notebook-markdown";
@@ -26,11 +26,20 @@ type Tab = "sources" | "chat" | "notes" | "studio";
 
 async function chatApi(notebookId: string, message: string, extra?: Record<string, unknown>): Promise<string> {
   const token = localStorage.getItem("octos_session_token") || localStorage.getItem("octos_auth_token");
-  const resp = await fetch("/api/chat", {
+  // Try notebook-specific RAG chat first, fall back to generic chat
+  let resp = await fetch(`/api/notebooks/${notebookId}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: JSON.stringify({ message, session_id: `notebook-${notebookId}`, ...extra }),
+    body: JSON.stringify({ message, ...extra }),
   });
+  if (!resp.ok) {
+    // Fallback to generic chat if notebook chat API not available
+    resp = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ message, session_id: `notebook-${notebookId}`, ...extra }),
+    });
+  }
   const data = await resp.json();
   return data.content || "No response";
 }
@@ -314,11 +323,10 @@ export function NotebookDetailPage() {
   const [showSchedule, setShowSchedule] = useState(false);
 
   useEffect(() => {
-    listNotebooks().then((nbs) => {
-      const nb = nbs.find((n) => n.id === id);
-      if (nb) setNotebook(nb);
-      else navigate("/notebooks");
-    });
+    if (!id) return;
+    getNotebook(id)
+      .then((nb) => setNotebook(nb))
+      .catch(() => navigate("/notebooks"));
   }, [id, navigate]);
 
   if (!notebook) return null;
@@ -478,7 +486,7 @@ function SourcesPanel({
     for (const f of Array.from(files)) {
       const ext = f.name.split(".").pop()?.toLowerCase() || "";
       const type = ({ pdf: "pdf", docx: "docx", pptx: "pptx", png: "image", jpg: "image", jpeg: "image" } as Record<string, Source["type"]>)[ext] || "text";
-      await addSource(notebookId, { type, filename: f.name });
+      await uploadSourceFile(notebookId, f);
     }
     setAdding(null);
     load();
@@ -486,7 +494,7 @@ function SourcesPanel({
 
   const handleUrlAdd = async () => {
     if (!urlInput.trim()) return;
-    await addSource(notebookId, { type: "url", filename: urlInput.trim() });
+    await addSourceUrl(notebookId, urlInput.trim());
     setUrlInput("");
     setAdding(null);
     load();
@@ -494,7 +502,7 @@ function SourcesPanel({
 
   const handleTextAdd = async () => {
     if (!textInput.trim()) return;
-    await addSource(notebookId, { type: "text", filename: textTitle.trim() || "Pasted text", content: textInput });
+    await addSourceText(notebookId, { text: textInput, filename: textTitle.trim() || "Pasted text" });
     setTextInput("");
     setTextTitle("");
     setAdding(null);
@@ -511,7 +519,7 @@ function SourcesPanel({
     load();
   };
 
-  const typeIcon: Record<Source["type"], React.ReactNode> = {
+  const typeIcon: Record<Source["source_type"], React.ReactNode> = {
     pdf: <File size={16} className="text-red-400" />,
     docx: <FileText size={16} className="text-blue-400" />,
     pptx: <FileText size={16} className="text-orange-400" />,
@@ -596,7 +604,7 @@ function SourcesPanel({
               <button onClick={() => toggleSource(s.id)} className="text-muted hover:text-accent">
                 {selectedSources.has(s.id) ? <CheckSquare size={16} className="text-accent" /> : <Square size={16} />}
               </button>
-              {typeIcon[s.type]}
+              {typeIcon[s.source_type]}
               <span className="flex-1 truncate text-sm text-text">{s.filename}</span>
               <span className={`text-xs px-1.5 py-0.5 rounded ${s.status === "ready" ? "bg-green-500/10 text-green-400" : s.status === "error" ? "bg-red-500/10 text-red-400" : "bg-yellow-500/10 text-yellow-400"}`}>
                 {s.status}
@@ -802,13 +810,13 @@ function NotesPanel({ notebookId }: { notebookId: string }) {
   };
 
   const handleUpdate = async (noteId: string) => {
-    await updateNote(noteId, editContent);
+    await updateNote(notebookId, noteId, editContent);
     setEditingId(null);
     load();
   };
 
   const handleDelete = async (noteId: string) => {
-    await deleteNote(noteId);
+    await deleteNote(notebookId, noteId);
     load();
   };
 
