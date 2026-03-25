@@ -5,6 +5,7 @@ import {
   Upload, Plus, Trash2, Link, Type, File, Image, Globe,
   BookmarkPlus, Edit3, X, Send, CheckSquare, Square, Loader2,
   ChevronLeft, ChevronRight, RotateCcw, Eye, Columns2,
+  Share2, UserPlus, Copy, Clock, Calendar, MessageCircle,
 } from "lucide-react";
 import { listNotebooks } from "../api/notebooks";
 import { listSources, addSource, deleteSource } from "../api/sources";
@@ -41,6 +42,258 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
   );
 }
 
+// ─── Share types & helpers (Issue #39) ──────────────────────
+
+interface ShareEntry {
+  email: string;
+  role: "viewer" | "editor";
+  sharedAt: string;
+}
+
+const SHARES_KEY = (id: string) => `mofa_notebook_shares_${id}`;
+
+function loadShares(notebookId: string): ShareEntry[] {
+  try {
+    return JSON.parse(localStorage.getItem(SHARES_KEY(notebookId)) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveShares(notebookId: string, shares: ShareEntry[]) {
+  localStorage.setItem(SHARES_KEY(notebookId), JSON.stringify(shares));
+}
+
+// ─── Schedule types & helpers (Issue #51) ───────────────────
+
+interface ScheduleEntry {
+  id: string;
+  frequency: "daily" | "weekly";
+  time: string;
+  contentType: "flashcard_review" | "daily_summary";
+  createdAt: string;
+}
+
+const SCHEDULES_KEY = (id: string) => `mofa_notebook_schedules_${id}`;
+
+function loadSchedules(notebookId: string): ScheduleEntry[] {
+  try {
+    return JSON.parse(localStorage.getItem(SCHEDULES_KEY(notebookId)) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveSchedules(notebookId: string, schedules: ScheduleEntry[]) {
+  localStorage.setItem(SCHEDULES_KEY(notebookId), JSON.stringify(schedules));
+}
+
+// ─── Share Dialog (Issue #39) ───────────────────────────────
+
+function ShareDialog({ notebookId, onClose, onToast }: { notebookId: string; onClose: () => void; onToast: (msg: string) => void }) {
+  const [shares, setShares] = useState<ShareEntry[]>(() => loadShares(notebookId));
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"viewer" | "editor">("viewer");
+
+  const handleShare = () => {
+    if (!email.trim()) return;
+    const entry: ShareEntry = { email: email.trim(), role, sharedAt: new Date().toISOString() };
+    const updated = [...shares, entry];
+    setShares(updated);
+    saveShares(notebookId, updated);
+    setEmail("");
+    onToast(`Shared with ${entry.email} as ${entry.role}`);
+  };
+
+  const handleRevoke = (idx: number) => {
+    const updated = shares.filter((_, i) => i !== idx);
+    setShares(updated);
+    saveShares(notebookId, updated);
+  };
+
+  const handleCopyLink = () => {
+    const link = `${window.location.origin}/notebooks/${notebookId}?shared=true`;
+    navigator.clipboard.writeText(link).then(() => onToast("Link copied!"));
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl border border-border bg-surface-light p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-text-strong">Share Notebook</h2>
+          <button onClick={onClose} className="rounded p-1 text-muted hover:text-text"><X size={18} /></button>
+        </div>
+
+        {/* Add share */}
+        <div className="mb-4 flex gap-2">
+          <input
+            type="email"
+            placeholder="Email address..."
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleShare()}
+            className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-muted focus:border-accent focus:outline-none"
+          />
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value as "viewer" | "editor")}
+            className="rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text focus:border-accent focus:outline-none"
+          >
+            <option value="viewer">Viewer</option>
+            <option value="editor">Editor</option>
+          </select>
+          <button
+            onClick={handleShare}
+            disabled={!email.trim()}
+            className="rounded-lg bg-accent px-3 py-2 text-sm text-white hover:bg-accent/90 disabled:opacity-50"
+          >
+            <UserPlus size={16} />
+          </button>
+        </div>
+
+        {/* Current shares */}
+        <div className="mb-4 max-h-48 space-y-2 overflow-y-auto">
+          {shares.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted">No shares yet</p>
+          ) : (
+            shares.map((s, i) => (
+              <div key={i} className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
+                <div>
+                  <span className="text-sm text-text">{s.email}</span>
+                  <span className="ml-2 rounded bg-accent/10 px-1.5 py-0.5 text-xs text-accent">{s.role}</span>
+                </div>
+                <button onClick={() => handleRevoke(i)} className="text-xs text-red-400 hover:text-red-300">Revoke</button>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Copy link */}
+        <button
+          onClick={handleCopyLink}
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-muted hover:border-accent/50 hover:text-text transition"
+        >
+          <Copy size={14} />
+          Copy shareable link
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Schedule Dialog (Issue #51) ────────────────────────────
+
+function ScheduleDialog({ notebookId, onClose, onToast }: { notebookId: string; onClose: () => void; onToast: (msg: string) => void }) {
+  const [schedules, setSchedules] = useState<ScheduleEntry[]>(() => loadSchedules(notebookId));
+  const [frequency, setFrequency] = useState<"daily" | "weekly">("daily");
+  const [time, setTime] = useState("09:00");
+  const [contentType, setContentType] = useState<"flashcard_review" | "daily_summary">("daily_summary");
+
+  const handleSave = () => {
+    const entry: ScheduleEntry = {
+      id: `sch-${Date.now()}`,
+      frequency,
+      time,
+      contentType,
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [...schedules, entry];
+    setSchedules(updated);
+    saveSchedules(notebookId, updated);
+    onToast(`Schedule saved: ${frequency} at ${time}`);
+  };
+
+  const handleDelete = (id: string) => {
+    const updated = schedules.filter((s) => s.id !== id);
+    setSchedules(updated);
+    saveSchedules(notebookId, updated);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl border border-border bg-surface-light p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-text-strong">Schedule Push</h2>
+          <button onClick={onClose} className="rounded p-1 text-muted hover:text-text"><X size={18} /></button>
+        </div>
+
+        {/* Frequency */}
+        <div className="mb-3">
+          <label className="mb-1 block text-xs font-medium text-muted">Frequency</label>
+          <div className="flex gap-2">
+            {(["daily", "weekly"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFrequency(f)}
+                className={`rounded-lg border px-3 py-1.5 text-sm capitalize transition ${
+                  frequency === f ? "border-accent bg-accent/15 text-accent" : "border-border text-text hover:border-accent/50"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Time */}
+        <div className="mb-3">
+          <label className="mb-1 block text-xs font-medium text-muted">Time</label>
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:border-accent focus:outline-none"
+          />
+        </div>
+
+        {/* Content type */}
+        <div className="mb-4">
+          <label className="mb-1 block text-xs font-medium text-muted">Content Type</label>
+          <div className="flex gap-2">
+            {([
+              { key: "flashcard_review" as const, label: "Flashcard Review" },
+              { key: "daily_summary" as const, label: "Daily Summary" },
+            ]).map((ct) => (
+              <button
+                key={ct.key}
+                onClick={() => setContentType(ct.key)}
+                className={`rounded-lg border px-3 py-1.5 text-sm transition ${
+                  contentType === ct.key ? "border-accent bg-accent/15 text-accent" : "border-border text-text hover:border-accent/50"
+                }`}
+              >
+                {ct.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={handleSave}
+          className="mb-4 w-full rounded-lg bg-accent px-4 py-2 text-sm text-white hover:bg-accent/90"
+        >
+          Save Schedule
+        </button>
+
+        {/* Active schedules */}
+        <div className="max-h-40 space-y-2 overflow-y-auto">
+          {schedules.length === 0 ? (
+            <p className="py-2 text-center text-sm text-muted">No active schedules</p>
+          ) : (
+            schedules.map((s) => (
+              <div key={s.id} className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
+                <div className="text-sm text-text">
+                  <span className="capitalize">{s.frequency}</span> at {s.time} — {s.contentType === "flashcard_review" ? "Flashcard Review" : "Daily Summary"}
+                </div>
+                <button onClick={() => handleDelete(s.id)} className="text-xs text-red-400 hover:text-red-300">Delete</button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ──────────────────────────────────────────────
 
 export function NotebookDetailPage() {
@@ -50,6 +303,8 @@ export function NotebookDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>("chat");
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
+  const [showShare, setShowShare] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
 
   useEffect(() => {
     listNotebooks().then((nbs) => {
@@ -105,7 +360,28 @@ export function NotebookDetailPage() {
             </button>
           ))}
         </div>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setShowSchedule(true)}
+            className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm text-muted hover:bg-surface-light hover:text-text transition"
+            title="Schedule push"
+          >
+            <Calendar size={16} />
+          </button>
+          <button
+            onClick={() => setShowShare(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-accent/10 px-3 py-1.5 text-sm text-accent hover:bg-accent/20 transition"
+          >
+            <Share2 size={14} />
+            Share
+          </button>
+        </div>
       </div>
+
+      {/* Share Dialog (Issue #39) */}
+      {showShare && <ShareDialog notebookId={notebook.id} onClose={() => setShowShare(false)} onToast={(m) => setToast(m)} />}
+      {/* Schedule Dialog (Issue #51) */}
+      {showSchedule && <ScheduleDialog notebookId={notebook.id} onClose={() => setShowSchedule(false)} onToast={(m) => setToast(m)} />}
 
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-hidden">
@@ -732,7 +1008,7 @@ function StudioPanel({ notebookId }: { notebookId: string }) {
   }
 
   return (
-    <div className="p-6">
+    <div className="flex-1 overflow-y-auto p-6">
       <h2 className="mb-4 text-lg font-semibold text-text-strong">Studio</h2>
       <p className="mb-6 text-sm text-muted">Generate courseware and study materials from your sources</p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -748,6 +1024,113 @@ function StudioPanel({ notebookId }: { notebookId: string }) {
           </button>
         ))}
       </div>
+
+      {/* Share to Chat (Issue #50) */}
+      <ShareToChatSection notebookId={notebookId} />
+    </div>
+  );
+}
+
+// ─── Share to Chat (Issue #50) ──────────────────────────────
+
+const IM_CHANNELS = [
+  { key: "wechat", label: "WeChat", color: "bg-green-600" },
+  { key: "feishu", label: "Feishu", color: "bg-blue-500" },
+  { key: "telegram", label: "Telegram", color: "bg-sky-500" },
+  { key: "discord", label: "Discord", color: "bg-indigo-500" },
+] as const;
+
+const SHARE_CONTENT_TYPES = [
+  { key: "slides", label: "Slides" },
+  { key: "quiz", label: "Quiz" },
+  { key: "notes", label: "Notes" },
+] as const;
+
+function ShareToChatSection({ notebookId }: { notebookId: string }) {
+  const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
+  const [selectedContent, setSelectedContent] = useState<Set<string>>(new Set());
+  const [sent, setSent] = useState<string | null>(null);
+
+  const toggleContent = (key: string) => {
+    setSelectedContent((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const handleSend = () => {
+    if (!selectedChannel || selectedContent.size === 0) return;
+    const channelLabel = IM_CHANNELS.find((c) => c.key === selectedChannel)?.label || selectedChannel;
+    setSent(`Sent to ${channelLabel}!`);
+    setTimeout(() => setSent(null), 2500);
+  };
+
+  return (
+    <div className="mt-8 rounded-xl border border-border bg-surface p-4">
+      <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-strong">
+        <MessageCircle size={16} />
+        Share to Chat
+      </h3>
+
+      {/* Channel selector */}
+      <div className="mb-3">
+        <label className="mb-1 block text-xs text-muted">Channel</label>
+        <div className="flex gap-2">
+          {IM_CHANNELS.map((ch) => (
+            <button
+              key={ch.key}
+              onClick={() => setSelectedChannel(ch.key)}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition ${
+                selectedChannel === ch.key
+                  ? "border-accent bg-accent/15 text-accent"
+                  : "border-border text-text hover:border-accent/50"
+              }`}
+            >
+              <span className={`inline-block h-2.5 w-2.5 rounded-full ${ch.color}`} />
+              {ch.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Content selector */}
+      <div className="mb-3">
+        <label className="mb-1 block text-xs text-muted">Content to share</label>
+        <div className="flex gap-2">
+          {SHARE_CONTENT_TYPES.map((ct) => (
+            <button
+              key={ct.key}
+              onClick={() => toggleContent(ct.key)}
+              className={`rounded-lg border px-3 py-1.5 text-sm transition ${
+                selectedContent.has(ct.key)
+                  ? "border-accent bg-accent/15 text-accent"
+                  : "border-border text-text hover:border-accent/50"
+              }`}
+            >
+              {selectedContent.has(ct.key) ? <CheckSquare size={14} className="mr-1 inline" /> : <Square size={14} className="mr-1 inline" />}
+              {ct.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Send */}
+      <button
+        onClick={handleSend}
+        disabled={!selectedChannel || selectedContent.size === 0}
+        className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm text-white hover:bg-accent/90 disabled:opacity-50 transition"
+      >
+        <Send size={14} />
+        Send
+      </button>
+
+      {sent && (
+        <div className="mt-2 rounded-lg bg-green-500/10 border border-green-500/30 px-3 py-2 text-sm text-green-400">
+          {sent}
+        </div>
+      )}
     </div>
   );
 }
