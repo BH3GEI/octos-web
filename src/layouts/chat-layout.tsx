@@ -14,7 +14,7 @@ export function ChatLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isNotebookRoute = location.pathname.startsWith("/notebooks");
+  const isNotebookRoute = location.pathname.startsWith("/notebooks") || location.pathname.startsWith("/library");
 
   return (
     <div className="flex h-screen bg-surface-dark">

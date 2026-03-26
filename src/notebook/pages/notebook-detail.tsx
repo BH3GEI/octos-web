@@ -690,16 +690,16 @@ function ChatPanel({
 
   const inputBar = (
     <div className="border-t border-border p-4">
-      <div className="flex gap-2">
+      <div className="mx-auto flex max-w-3xl gap-2">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
           placeholder="Ask about your sources..."
-          className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:border-accent focus:outline-none"
+          className="flex-1 rounded-xl border border-border bg-surface-light px-4 py-2.5 text-sm text-text shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
         />
         <button onClick={() => handleSend()} disabled={!input.trim() || loading}
-          className="rounded-lg bg-accent px-3 py-2 text-white disabled:opacity-50">
+          className="rounded-xl bg-accent px-4 py-2.5 text-white shadow-sm hover:bg-accent-dim disabled:opacity-40 transition">
           <Send size={16} />
         </button>
       </div>
@@ -711,15 +711,17 @@ function ChatPanel({
     return (
       <div className="flex h-full flex-col">
         <div className="flex-1 flex flex-col items-center justify-center text-muted px-4">
-          <MessageSquare size={48} className="mb-4 opacity-30" />
-          <p className="text-lg">Chat with your sources</p>
+          <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent/10">
+            <MessageSquare size={28} className="text-accent" />
+          </div>
+          <p className="text-lg font-medium text-text-strong">Chat with your sources</p>
           <p className="mb-6 text-sm">Ask questions about the documents in this notebook</p>
-          <div className="grid w-full max-w-lg gap-2 sm:grid-cols-2">
+          <div className="flex flex-wrap justify-center gap-2 max-w-xl">
             {SUGGESTED_QUESTIONS.map((q) => (
               <button
                 key={q}
                 onClick={() => handleSend(q)}
-                className="rounded-lg border border-border bg-surface px-3 py-2.5 text-left text-sm text-text hover:border-accent/50 hover:bg-surface-light transition"
+                className="rounded-full border border-border bg-surface px-4 py-2 text-xs text-text hover:border-accent hover:text-accent hover:bg-accent/5 transition"
               >
                 {q}
               </button>
@@ -734,28 +736,28 @@ function ChatPanel({
   return (
     <div className="flex h-full flex-col">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-5">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[80%] rounded-xl px-4 py-2.5 text-sm ${
+            <div className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
               m.role === "user"
-                ? "bg-accent text-white"
-                : "bg-surface-light text-text"
+                ? "bg-accent text-white rounded-br-md"
+                : "bg-surface-light text-text border border-border/50 rounded-bl-md"
             }`}>
               {m.role === "assistant" ? (
                 <NotebookMarkdown text={m.content} onCitationClick={onCitationClick} />
               ) : (
                 m.content
               )}
-              {/* Issue #19: save to note button */}
               {m.role === "assistant" && (
-                <div className="mt-1.5 flex justify-end">
+                <div className="mt-2 flex justify-end border-t border-border/30 pt-1.5">
                   <button
                     onClick={() => onSaveNote(m.content)}
-                    className="flex items-center gap-1 rounded p-1 text-xs text-muted hover:text-accent transition"
+                    className="flex items-center gap-1 rounded-md px-2 py-0.5 text-xs text-muted hover:text-accent hover:bg-accent/5 transition"
                     title="Save to Notes"
                   >
-                    <BookmarkPlus size={14} />
+                    <BookmarkPlus size={13} />
+                    <span>Save</span>
                   </button>
                 </div>
               )}
@@ -764,7 +766,12 @@ function ChatPanel({
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="rounded-xl bg-surface-light px-4 py-2.5 text-sm text-muted animate-pulse">Thinking...</div>
+            <div className="rounded-2xl rounded-bl-md border border-border/50 bg-surface-light px-4 py-3 text-sm text-muted shadow-sm">
+              <div className="flex items-center gap-2">
+                <Loader2 size={14} className="animate-spin" />
+                Thinking...
+              </div>
+            </div>
           </div>
         )}
         <div ref={bottomRef} />
